@@ -41,11 +41,17 @@ if __name__ == "__main__":
             #New connection
             if sock == server_socket:
                 # Handle the case in which there is a new connection recieved through server_socket
+
                 sockfd, addr = server_socket.accept()
-                CONNECTION_LIST.append(sockfd)
-                print "Player (%s, %s) connected" % addr
-                 
-                broadcast_data(sockfd, "[%s:%s] entered room\n" % addr)
+
+                if len(CONNECTION_LIST) < 3:
+	                CONNECTION_LIST.append(sockfd)
+	                print "Player (%s, %s) connected" % addr	   
+	                sockfd.send('allowed')              
+	                broadcast_data(sockfd, "[%s:%s] entered room\n" % addr)
+                else:
+	            	print "Limite de jogadores atingido."
+	            	sockfd.send('denied')
 
 			#Some incoming message from a client
             else:

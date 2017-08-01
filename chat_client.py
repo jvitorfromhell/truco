@@ -25,9 +25,6 @@ if __name__ == "__main__":
     except :
         print 'Unable to connect'
         sys.exit()
-     
-    print 'Connected to remote host. Start sending messages'
-    prompt()
 
     while 1:
         socket_list = [sys.stdin, s]
@@ -42,6 +39,15 @@ if __name__ == "__main__":
                 if not data :
                     print '\nDisconnected from chat server'
                     sys.exit()
+                
+                elif 'denied' in data:
+                	print 'Sem permissao para conectar.'
+                	sys.exit()
+                
+                elif'allowed' in data:
+                	print 'Conectado!'
+                	prompt()
+                
                 else :
                     #print data
                     sys.stdout.write(data)
