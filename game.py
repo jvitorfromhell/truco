@@ -1,5 +1,5 @@
 import cards, player
-import pygame, time
+import pygame, time, random
 
 buttons = { "connect"   : (400, 600, 224, 100),
             "truco"     : (800, 424, 150, 70),
@@ -8,11 +8,35 @@ buttons = { "connect"   : (400, 600, 224, 100),
             "carta0"    : (100, 424, 152, 270),
             "carta1"    : (325, 424, 152, 270),
             "carta2"    : (550, 424, 152, 270),
-            "playAgain" : 0}
+            "playAgain" : 0,
+            "quit"      : 0}
 
 class Game:
     def __init__(self):
+        self.playerA = None
+        self.playerB = None
+        self.activePlayer = None
+        self.trucoOn = False
+        self.retrucoOn = False
+        self.vale4On = False
+        self.invidoOn = False
+        self.florOn = False
+        self.scores = []
+        self.roundScores = []
+        self.deck = None
         self.state = "start"
+        self.playState = None
+        self.winner = None
+
+    def startGame(self, pA, pB):
+        self.playerA = pA
+        self.playerB = pB
+        self.deck = cards.Deck()
+        self.scores = [0, 0]
+        self.startRound()
+        self.deck.shuffle()
+        self.deck.deal([self.playerA, self.playerB])
+        self.activePlayer = random.randint(0, 1)
 
     def setState(self, newState):
         self.state = newState
@@ -29,36 +53,56 @@ class Game:
     def endState(self):
         return self.state == "end"
 
+    def terminateState(self):
+        return self.state == "terminate"
+
+    def winsPlay(self, cardA, cardB):
+        if cardA.getScore() < cardB.getScore():
+            return 1
+        elif cardA.getScore() > cardB.getScore():
+            return -1
+        else:
+            return 0
+
+    def swapActive(self):
+        self.activePlayer = (self.activePlayer + 1) % 2
+
+    def clickHandler(self, mousepos, IP):
+        if self.startState() and clickInsideButton(mousepos, buttons["connect"]):
+            self.setState("waiting")
+    
+        # TEMPORARY
+        elif self.waitingState():
+            self.setState("playing")
+        
+        # TEMPORARY
+        elif self.playingState() and self.activePlayer.isThisMe(IP):
+            if clickInsideButton(mousepos, buttons["truco"]):
+                pass
+            elif clickInsideButton(mousepos, buttons["invido"]):
+                pass
+            elif clickInsideButton(mousepos, buttons["carta0"]):
+                pass
+            elif clickInsideButton(mousepos, buttons["carta1"]):
+                pass
+            elif clickInsideButton(mousepos, buttons["carta2"]):
+                pass
+
+        
+        elif game.endState() and clickInsideButton(mousepos, buttons["playAgain"]):
+            self.setState("waiting")
+            
+        elif game.endState() and clickInsideButton(mousepos, buttons["quit"]):
+            self.setState("terminate")
+
     def gameStateToString(self):
         pass
 
-    def stringToGameState(self):
+    def stringToGameState(self, string):
         pass
 
     def updateGameState(self):
         pass
-        
-    #     self.players = players
-    #     self.scores = [0 for _ in range(len(self.players))]
-    #     self.roundScore = [0 for _ in range(len(self.players))]
-    #     self.deck = cards.Deck()
-
-    #     self.deck.shuffle()
-    #     self.deck.deal(self.players)
-
-    # def update(self, play):
-    #     return True
-
-    # def round(self):
-    #     pass
-
-    # def evaluate(self, cardA, cardB):
-    #     if cardA.getScore() < cardB.getScore():
-    #         return 1
-    #     elif cardA.getScore() == cardB.getScore():
-    #         return 0
-    #     else:
-    #         return -1        
 
 def drawStartScreen(display, game):
     # Logo
@@ -103,23 +147,13 @@ def drawMainGameScreen(display, game, mousepos):
 def drawEndGameScreen(display, game):
     pass
 
+def drawTerminateGameScreen(display, game):
+    sleep(3)
+    pygame.quit()
+    sys.exit()
+
 def hoverArea(mousepos, area):
     return mousepos[0] > area[0] and mousepos[0] < area[0] + area[2] and mousepos[1] > area[1] and mousepos[1] < area[1] + area[3]
 
 def clickInsideButton(mousepos, button):
     return mousepos[0] > button[0] and mousepos[0] < button[0] + button[2] and mousepos[1] > button[1] and mousepos[1] < button[1] + button[3]
-
-def clickHandler(game, mousepos):
-    if game.startState() and clickInsideButton(mousepos, buttons["connect"]):
-        game.setState("waiting")
-    
-    # TEMPORARY
-    elif game.waitingState():
-        game.setState("playing")
-    
-    # TEMPORARY
-    elif game.playingState():
-        pass
-    
-    elif game.endState():
-        pass

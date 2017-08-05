@@ -4,6 +4,9 @@ import cards, player, game
 from pygame.locals import *
 from game import *
 
+# Client Startup
+myIP = 0
+
 # Window Startup
 pygame.init()
 display = pygame.display.set_mode((1024, 768))
@@ -17,9 +20,9 @@ while True:
     display.fill((39, 119, 20))
     for event in pygame.event.get():
         if event.type == pygame.MOUSEBUTTONDOWN:
-            clickHandler(truco, pygame.mouse.get_pos())
+            clickHandler(truco, pygame.mouse.get_pos(), IP)
         if event.type == pygame.MOUSEBUTTONUP:
-            print "UP"
+            pass
         if event.type == QUIT:
             pygame.quit()
             sys.exit()
@@ -32,5 +35,7 @@ while True:
         drawMainGameScreen(display, truco, pygame.mouse.get_pos())
     if truco.endState():
         drawEndGameScreen(display, truco)
+    if truco.terminateState():
+        drawTerminateGameScreen(display, truco)
     
     pygame.display.update()

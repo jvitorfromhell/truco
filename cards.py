@@ -45,14 +45,21 @@ cardValues = {  (1, 'spades')  : 1,
 
 class Card:
     def __init__(self, value, suit):
-        self.value = (value, suit)
-        self.score = cardValues[self.value]
+        self.value = value
+        self.suit = suit
+        self.score = cardValues[(self.value, self.suit)]
 
-    def __str__(self):
-        return str(self.value) + " " + self.suit
+    def getValue(self):
+        return self.value
+
+    def getSuit(self):
+        return self.suit
 
     def getScore(self):
         return self.score
+
+    def isFag(self):
+        return self.value == 10 or self.value == 11 or self.value == 12
 
 class Deck:
     def __init__(self):
@@ -64,6 +71,8 @@ class Deck:
             players[i].addCard(self.cards[indexes[i * 3]])
             players[i].addCard(self.cards[indexes[i * 3 + 1]])
             players[i].addCard(self.cards[indexes[i * 3 + 2]])
+            players[i].defineFlor()
+            players[i].defineInvido()
 
     def shuffle(self):
         random.shuffle(self.cards)
