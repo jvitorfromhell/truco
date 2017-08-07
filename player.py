@@ -1,9 +1,7 @@
 import cards
 
 class Player:
-    def __init__(self, name):
-        self.name = name
-        self.IP = None
+    def __init__(self):
         self.cards = []
         self.invido = False
         self.invidoValue = None
@@ -14,9 +12,6 @@ class Player:
         return self.cards
 
     def toString(self):
-        pass
-
-    def askConnection(self):
         pass
 
     def addCard(self, card):
