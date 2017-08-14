@@ -1,5 +1,5 @@
 import cards, player
-import pygame, time, random
+import time, random
 
 # Estados onde o servidor envia a mesma mensagem para todos
 broadcast_states = ['connected', 'gameSetup', 'roundContinue']
