@@ -11,7 +11,7 @@ if __name__ == "__main__":
     s.settimeout(2)
 
     # Informar IP de conexao com o servidor
-    #print "Informe o IP do servidor: "     
+    print "Informe o IP do servidor: "     
     host = raw_input()
 
     # Tentar conexao
