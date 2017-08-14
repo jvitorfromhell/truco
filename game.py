@@ -1,284 +1,349 @@
 import cards, player
 import pygame, time, random
 
-buttons = { "connect"   : (400, 600, 224, 100),
-            "truco"     : (800, 424, 150, 70),
-            "invido"    : (800, 524, 150, 70),
-            "flor"      : (800, 624, 150, 70),
-            "carta0"    : (100, 424, 152, 270),
-            "carta1"    : (325, 424, 152, 270),
-            "carta2"    : (550, 424, 152, 270),
-            "playAgain" : 0,
-            "quit"      : 0}
+# Estados onde o servidor envia a mesma mensagem para todos
+broadcast_states = ['connected', 'gameSetup', 'roundContinue']
 
+# Placar para final de jogo
+final_score = 3
+
+# clientGame : versao do jogo que lida com as acoes no lado cliente
 class clientGame:
-    def __init__(self):
-        self.state = "waitingServer"
-        self.cards = []
+    # Metodo construtor
+    def __init__(self, s):
+        self.state = s
+        self.player = None
 
-    def start(self, message):
-        self.state = message
-        print "Oponente conectado, inicializando jogo\n"
-
-    def round(self, message):
-        message = message.split("\n")
-        self.state = message[1]
-        print "Inicio de rodada"
-        print "Sua mao tem: " + message[2] + ", " + message[3] + " e " + message[4]
-
-    def getOppPlay(self, message):
-        print "Seu oponente jogou: " + message
-        self.state = "active"
-
-    def getPlayResult(self, message):
-        print message
-        self.state = 'terminate'
-
+    # Retorna estado atual
     def getState(self):
         return self.state
 
-    def setState(self, state):
-        self.state = state
+    # Atualiza Estado de Jogo
+    def evaluateGameState(self, s):
+        # Estado conectado, aguardando inicializacao
+        if self.state == 'connected':
+            message = s.recv(4096)
+            print "Oponente conectado, servidor inicializando o jogo"
+            self.state = 'gameSetup'
 
-    def evaluateMessage(self, message):
-        if 'terminate' in message:
-            self.state = 'terminate'
-        else:
-            self.state = message
+        # Estado inicializado, aguardando rodada
+        elif self.state == 'gameSetup':
+            message = s.recv(4096)
+            print "Jogo inicializado"
+            self.start()
+            self.state = 'roundBegin'
+
+        # Inicio de rodada
+        elif self.state == 'roundBegin':
+            message = s.recv(4096)
+            self.roundBegin(message)
+            self.state = 'getPlayStatus'
+
+        # Aguardando pra saber se eh o jogador ativo ou inativo
+        elif self.state == 'getPlayStatus':
+            self.state = s.recv(4096)
+
+        # Jogador ativo
+        elif self.state == 'active':
+            print "Voce eh o jogador ativo. Qual carta deseja jogar?"
+            play = int(raw_input())
+            while (play < 0 or play > self.player.numCards()):
+                print "INVALIDO"
+                play = int(raw_input())
+            self.player.play(play, s)
+            print "Jogada enviada, aguardando resposta do seu oponente."
+            self.state = 'waitingOppPlay'
+
+        # Esperando responsta do oponente
+        elif self.state == 'waitingOppPlay':
+            play = s.recv(4096)
+            print "Seu oponente jogou: " + play
+            self.state = 'waitingPlayResult'
+
+        # Jogador inativo
+        elif self.state == 'inactive':
+            print "Voce eh o jogador inativo, esperando jogada do oponente"
+            self.state = 'waitingPlay'
+
+        # Aguardando jogada
+        elif self.state == 'waitingPlay':
+            play = s.recv(4096)
+            print "Seu oponente jogou: " + play
+            self.state = 'respond'
+
+        # Respondendo jogada
+        elif self.state == 'respond':
+            print "Qual carta deseja jogar?"
+            play = int(raw_input())
+            while (play < 0 or play > self.player.numCards()):
+                print "INVALIDO"
+                play = int(raw_input())
+            self.player.play(play, s)
+            print "Jogada enviada, aguardando servidor processar resultado"
+            self.state = 'waitingPlayResult'
+
+        # Aguardando resultado da jogada
+        elif self.state == 'waitingPlayResult':
+            result = s.recv(4096)
+            if 'winner' in result:
+                print "Voce venceu!"
+            elif 'loser' in result:
+                print "Voce perdeu ):"
+            else:
+                print "Empardou!"
+            self.state = 'waitRoundUpdate'
+
+        # Aguarda status do round
+        elif self.state == 'waitRoundUpdate':
+            update = s.recv(4096)
+            if 'roundContinue' in update:
+                print "A rodada continua!\n"
+                self.state = 'roundContinue'
+            else:
+                if 'winner' in update:
+                    print "Voce venceu a rodada!"
+                else:
+                    print "Voce perdeu a rodada"
+                self.state = 'roundEnd'
+
+        # Segue round
+        elif self.state == 'roundContinue':
+            self.player.printCards()
+            self.state = 'getPlayStatus'
+
+        # Termina round
+        elif self.state == 'roundEnd':
+            self.state = 'getGameResults'
+
+        # Verifica estado do jogo
+        elif self.state == 'getGameResults':
+            results = s.recv(4096)
+            if 'winner' in results:
+                print "Voce venceu o jogo!"
+                self.state = 'terminate'
+            elif 'loser' in results:
+                print "Voce perdeu o jogo!"
+                self.state = 'terminate'
+            else:
+                print "O jogo continua! O placar eh " + results
+                self.state = 'roundBegin'
+
+    # Inicializa jogo, a nivel local
+    def start(self):
+        self.player = player.Player()
+
+    # Inicializa rodada, a nivel local
+    def roundBegin(self, message):
+        print "\nInicio de rodada.\n"
+        message = message.split('\n')
+        self.player.round(message)
+        self.player.printCards()
 
 
+# serverGame : versao do jogo que lida com as acoes no lado servidor
 class serverGame:
-    def __init__(self):
-        self.state = None
+    
+    # Metodo construtor
+    def __init__(self, s):
+        # Atributos relacionados ao jogo inteiro
+        self.state = s
+        self.deck = cards.Deck()
+        self.scores = [0, 0]
         self.firstPlayer = None
+
+        # Atributos relacionados a uma rodada
+        self.roundScore = [0, 0]
+        self.roundValue = 1
+        self.roundPlays = 0
+        self.winners = [None, None, None]
+
+        # Atributos relacionados a uma jogada
         self.activePlayer = None
         self.inactivePlayer = None
         self.playedCard = None
         self.winner = None
 
-        self.deck = cards.Deck()
-        self.hands = [[], []]
-
-    def startGame(self, sockets):
-        self.state = 'gameSetup'
-        self.firstPlayer = random.randint(0, 1)
-        self.sendMessages(sockets)
-
-    def round(self):
-        if self.state != 'gameSetup':
-            self.firstPlayer = self.swapFirst()
-        self.state = 'roundBegin'
-        self.activePlayer = self.firstPlayer
-        self.inactivePlayer = (self.activePlayer + 1) % 2
-        self.deck.shuffle()
-        self.deck.deal(self.hands)
-
+    # Retorna estado de jogo
     def getState(self):
         return self.state
 
-    def getActivePlayer(self):
-        return self.activePlayer
+    # Avalia estado de jogo
+    def evaluateGameState(self, sockets):
 
-    def getInactivePlayer(self):
-        return self.inactivePlayer
+        # Estado conectado
+        if self.state == 'connected':
+            self.sendMessages(sockets)
+            self.state = 'gameSetup'
 
-    def swapFirst(self):
-        self.firstPlayer = (self.firstPlayer + 1) % 2
+        # Estado de inicializacao
+        elif self.state == 'gameSetup':
+            self.sendMessages(sockets)
+            self.startGame()
+            self.state = 'roundBegin'
 
-    def swapActive(self):
-        self.activePlayer = (self.activePlayer + 1) % 2
-        self.inactivePlayer = (self.inactivePlayer + 1) % 2
-
-    def handMessage(self, playerID):
-        msg = str(self.hands[playerID][0]) + "\n" 
-        msg = msg + str(self.hands[playerID][1]) + "\n" 
-        msg = msg + str(self.hands[playerID][2]) + "\n"
-        return msg
-
-    def evaluateMessage(self, message):
-        if 'terminate' in message:
-            self.state = 'terminate'
-        
+        # Estado de inicio de rodada
         elif self.state == 'roundBegin':
-            self.state = 'getRes'
-            self.playedCard = self.hands[self.activePlayer][int(message)]
+            self.sendMessages(sockets)
+            self.roundBegin()
+            self.state = 'sendPlayStatus'
 
-        elif self.state == 'getRes':
-            self.state = 'sendRes'        
-            self.winner = self.winsPlay(self.playedCard, self.hands[self.inactivePlayer][int(message)])
+        # Envia mensagem de status de jogador a ambos jogadores
+        elif self.state == 'sendPlayStatus':
+            self.sendMessages(sockets)
+            self.state = 'waitingPlay1'
+
+        # Verifica se o round terminou
+        elif self.state == 'updateRoundResults':
+            # Condicao de vitoria 1 : score == 2
+            if max(self.roundScore) == 2:
+                self.winner = 0 if self.roundScore[0] == 2 else 1
+                self.state = 'roundEnd'
             
+            # Ocorreu empate
+            elif (self.roundPlays > 1) and (None in self.winners[:self.roundPlays]):
+                # Descobre primeiro vencedor
+                firstWinner = None
+                
+                for winner in self.winners[:self.roundPlays]:
+                    if winner != None:
+                        firstWinner = winner
+                        break
+
+                # Se ha primeiro vencedor, ele vence a rodada
+                if firstWinner != None:
+                    self.winner = firstWinner
+                    self.state = 'roundEnd'
+                    
+                # Se nao ha primeiro vencedor, mas as 3 jogadas ja aconteceram, vence o mao (quem comecou)
+                elif self.roundPlays == 3:
+                    self.winner = self.firstPlayer
+                    self.state = 'roundEnd'
+                
+                # Segue round
+                else:
+                    self.state = 'roundConinue'
+
+            # Segue round    
+            else:
+                self.state = 'roundContinue'
+
+        # Segue o round
+        elif self.state == 'roundContinue':
+            self.sendMessages(sockets)
+            self.state = 'sendPlayStatus'
+            if self.winner != None:
+                self.activePlayer = self.winner
+                self.inactivePlayer = (self.winner + 1) % 2
+
+        # Finaliza o round
+        elif self.state == 'roundEnd':
+            self.sendMessages(sockets)
+            self.scores[self.winner] = self.scores[self.winner] + self.roundValue
+            if max(self.scores) == final_score:
+                self.state = 'endGame'
+                self.winner = 0 if self.scores[0] == final_score else 1
+            else:
+                self.state = 'sendScores'
+
+        # Envia scores e comeca novo round
+        elif self.state == 'sendScores':
+            self.sendMessages(sockets)
+            self.firstPlayer = (self.firstPlayer + 1) % 2
+            self.state = 'roundBegin'
+
+        # Finaliza o jogo
+        elif self.state == 'endGame':
+            self.sendMessages(sockets)
+            self.state = 'terminate'
+
+    # Avalia mensagem recebida
+    def evaluateMessage(self, message):
+        
+        # Recebeu mensagem do jogador ativo
+        if self.state == 'waitingPlay1':
+            self.playedCard = message
+
+        elif self.state == 'waitingPlay2':
+            self.evaluatePlay(message.split(" "))
+            self.playedCard = message
+            self.state = 'sendPlayResult'
+
+    # Envia mensagens para os jogadores
     def sendMessages(self, sockets):
-        if self.state == 'gameSetup':
+        if self.state in broadcast_states:
             for s in sockets:
                 s.send(self.state)
-                time.sleep(2)
-        
-        elif self.state == 'roundBegin':
-            sockets[self.activePlayer].send(self.state + '\nactive\n' + 
-                                            self.handMessage(self.activePlayer))
-            sockets[self.inactivePlayer].send(self.state + '\ninactive\n' + 
-                                              self.handMessage(self.inactivePlayer))
-        elif self.state == 'getRes':
-            sockets[self.inactivePlayer].send(str(self.playedCard))
+                time.sleep(0.1)
 
-        elif self.state == 'sendRes':
+        elif self.state == 'roundBegin':
+            hands = self.deck.deal()
+            
+            for i in range(2):
+                message = str(hands[i][0]) + "\n" + str(hands[i][1]) + "\n" + str(hands[i][2])
+                sockets[i].send(message)
+
+        elif self.state == 'sendPlayStatus':
+            sockets[self.activePlayer].send('active')
+            sockets[self.inactivePlayer].send('inactive')
+
+        elif self.state == 'waitingPlay1':
+            sockets[self.inactivePlayer].send(self.playedCard)
+            self.playedCard = self.playedCard.split(" ")
+            self.state = 'waitingPlay2'
+
+        elif self.state == 'sendPlayResult':
+            sockets[self.activePlayer].send(self.playedCard)
+            time.sleep(0.05)
             if self.winner != None:
-                sockets[self.winner].send("Voce venceu!")
-                sockets[(self.winner + 1) % 2].send("Voce perdeu!")
+                sockets[self.winner].send('winner')
+                sockets[(self.winner + 1) % 2].send('loser')
             else:
                 for s in sockets:
-                    s.send("Empardou!")
-                time.sleep(2)
+                    s.send('draw')
+                    time.sleep(0.1)
+            self.roundPlays = self.roundPlays + 1
+            self.state = 'updateRoundResults'
 
-    def winsPlay(self, cardA, cardB):
+        elif self.state == 'roundEnd':
+            sockets[self.winner].send('winner')
+            sockets[(self.winner + 1) % 2].send('loser')
+
+        elif self.state == 'sendScores':
+            for i in range(2):
+                sockets[i].send(str(self.scores[i]) + "x" + str(self.scores[(i + 1) % 2]))
+                time.sleep(0.1)
+        
+        elif self.state == 'endGame':
+            sockets[self.winner].send('winner')
+            sockets[(self.winner + 1) % 2].send('loser')
+
+    # Inicializa jogo a nivel servidor
+    def startGame(self):
+        self.firstPlayer = random.randint(0, 1)
+        self.scores = [0, 0]
+
+    # Inicializa rodada a nivel servidor
+    def roundBegin(self):
+        self.activePlayer = self.firstPlayer
+        self.inactivePlayer = (self.activePlayer + 1) % 2
+        self.roundScore = [0, 0]
+        self.roundValue = 1
+        self.roundPlays = 0
+        self.winners = [None, None, None]
+        self.deck.shuffle()
+
+    # Avalia a jogada de duas cartas
+    def evaluatePlay(self, answerCard):
+        cardA = cards.Card(int(self.playedCard[0]), self.playedCard[1])
+        cardB = cards.Card(int(answerCard[0]), answerCard[1])
+
         if cardA.getScore() < cardB.getScore():
-            return self.activePlayer
+            self.winner = self.activePlayer
+            self.roundScore[self.winner] = self.roundScore[self.winner] + 1
         elif cardA.getScore() > cardB.getScore():
-            return self.inactivePlayer
+            self.winner = self.inactivePlayer
+            self.roundScore[self.winner] = self.roundScore[self.winner] + 1
         else:
-            return None
+            self.winner = None
 
-# class Game:
-#     def __init__(self):
-#         self.playerA = None
-#         self.playerB = None
-#         self.activePlayer = None
-#         self.trucoLevel = 0
-#         self.invidoOn = False
-#         self.florOn = False
-#         self.scores = []
-#         self.roundScores = []
-#         self.deck = None
-#         self.state = "start"
-#         self.playState = None
-#         self.winner = None
-
-#     def startGame(self, pA, pB):
-#         self.playerA = pA
-#         self.playerB = pB
-#         self.deck = cards.Deck()
-#         self.scores = [0, 0]
-#         self.startRound()
-#         self.deck.shuffle()
-#         self.deck.deal([self.playerA, self.playerB])
-#         self.activePlayer = random.randint(0, 1)
-
-#     def setState(self, newState):
-#         self.state = newState
-
-#     def startState(self):
-#         return self.state == "start"
-
-#     def waitingState(self):
-#         return self.state == "waiting"
-
-#     def playingState(self):
-#         return self.state == "playing"
-
-#     def endState(self):
-#         return self.state == "end"
-
-#     def terminateState(self):
-#         return self.state == "terminate"
-
-#     def winsPlay(self, cardA, cardB):
-#         if cardA.getScore() < cardB.getScore():
-#             return 1
-#         elif cardA.getScore() > cardB.getScore():
-#             return -1
-#         else:
-#             return 0
-
-#     def swapActive(self):
-#         self.activePlayer = (self.activePlayer + 1) % 2
-
-#     def clickHandler(self, mousepos, IP):
-#         if self.startState() and clickInsideButton(mousepos, buttons["connect"]):
-#             self.setState("waiting")
-    
-#         # TEMPORARY
-#         elif self.waitingState():
-#             self.setState("playing")
-        
-#         # TEMPORARY
-#         elif self.playingState() and self.activePlayer.isThisMe(IP):
-#             if clickInsideButton(mousepos, buttons["truco"]):
-#                 pass
-#             elif clickInsideButton(mousepos, buttons["invido"]):
-#                 pass
-#             elif clickInsideButton(mousepos, buttons["carta0"]):
-#                 pass
-#             elif clickInsideButton(mousepos, buttons["carta1"]):
-#                 pass
-#             elif clickInsideButton(mousepos, buttons["carta2"]):
-#                 pass
-
-        
-#         elif game.endState() and clickInsideButton(mousepos, buttons["playAgain"]):
-#             self.setState("waiting")
-            
-#         elif game.endState() and clickInsideButton(mousepos, buttons["quit"]):
-#             self.setState("terminate")
-
-#     def gameStateToString(self):
-#         pass
-
-#     def stringToGameState(self, string):
-#         pass
-
-#     def updateGameState(self):
-#         pass
-
-# def drawStartScreen(display, game):
-#     # Logo
-#     #logo = pygame.image.load('logo.png')
-#     #display.blit(logo, (200, 100))
-#     pygame.draw.rect(display, (0, 0, 0), (200, 50, 624, 300))
-
-#     # Text
-#     pygame.draw.rect(display, (0, 0, 0), (200, 450, 624, 50))
-
-#     # Input
-#     pygame.draw.rect(display, (0, 0, 0), (200, 510, 624, 50))
-
-#     # Button
-#     pygame.draw.rect(display, (0, 0, 0), buttons["connect"])
-
-
-# def drawWaitingConnectionScreen(display, game):
-#     # Waiting Connection Image
-#     pygame.draw.rect(display, (0, 0, 0), (200, 100, 624, 558))
-
-# def drawMainGameScreen(display, game, mousepos):
-#     # Card Hover
-#     if (hoverArea(mousepos, buttons["carta0"])):
-#         pygame.draw.rect(display, (200, 0, 0), buttons["carta0"])
-#     if (hoverArea(mousepos, buttons["carta1"])):
-#         pygame.draw.rect(display, (200, 0, 0), buttons["carta1"])
-#     if (hoverArea(mousepos, buttons["carta2"])):
-#         pygame.draw.rect(display, (200, 0, 0), buttons["carta2"])
-
-  
-#     # Card
-#     pygame.draw.rect(display, (255, 255, 255), (110, 434, 132, 250))
-#     pygame.draw.rect(display, (255, 255, 255), (335, 434, 132, 250))
-#     pygame.draw.rect(display, (255, 255, 255), (560, 434, 132, 250))
-
-#     # Buttons
-#     pygame.draw.rect(display, (0, 0, 0), buttons["truco"])
-#     pygame.draw.rect(display, (0, 0, 0), buttons["invido"])
-#     pygame.draw.rect(display, (0, 0, 0), buttons["flor"])
-
-# def drawEndGameScreen(display, game):
-#     pass
-
-# def drawTerminateGameScreen(display, game):
-#     sleep(3)
-#     pygame.quit()
-#     sys.exit()
-
-# def hoverArea(mousepos, area):
-#     return mousepos[0] > area[0] and mousepos[0] < area[0] + area[2] and mousepos[1] > area[1] and mousepos[1] < area[1] + area[3]
-
-# def clickInsideButton(mousepos, button):
-#     return mousepos[0] > button[0] and mousepos[0] < button[0] + button[2] and mousepos[1] > button[1] and mousepos[1] < button[1] + button[3]
+        self.winners[self.roundPlays] = self.winner

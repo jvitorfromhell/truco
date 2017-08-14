@@ -1,48 +1,63 @@
 import cards
 
+# Player : armazena informacoes sobre o jogador, usado a nivel cliente para tomar acoes
 class Player:
+    
+    # Metodo construtor
     def __init__(self):
-        self.cards = []
+        self.hand = []
+        self.canRaise = True
         self.invido = False
-        self.invidoValue = None
         self.flor = False
-        self.florValue = None
+        self.invidoValue = 0
+        self.florValue = 0
 
-    def getCards(self):
-        return self.cards
+    # Inicializa atributos no inicio de uma rodada
+    def round(self, card_strings):
+        card_list = []
+        for card in card_strings:
+            card_list.append(card.split(" "))
+        
+        self.hand = [cards.Card(int(card_list[i][0]), card_list[i][1]) for i in range(3)]
 
-    def toString(self):
-        pass
+        self.defineFlor()
 
-    def addCard(self, card):
-        self.cards.append(card)
+        if not self.flor:
+            self.defineInvido()
+        
 
+    # Define se usuario tem Flor (tres cartas do mesmo naipe) e calcula o valor
+    def defineFlor(self):
+        if self.hand[0].getSuit() == self.hand[1].getSuit() and self.hand[0].getSuit() == self.hand[2].getSuit():
+            self.flor = True
+            self.florValue = 20 + sum([self.hand[i].getValue() if not self.hand[i].isFag() else 0 for i in range(3)])
+
+    # Define se o usuario tem Invido (duas cartas do mesmo naipe) e calcula valor
+    def defineInvido(self):
+        if self.hasPair():
+            pair = self.getPair()
+            self.invido = True
+            self.invidoValue = 20 + sum([pair[i].getValue() if not pair[i].isFag() else 0 for i in range(len(pair))])
+
+    # Verifica se o usuario tem um par de cartas do mesmo naipe
     def hasPair(self):
-        return self.cards[0].getSuit() == self.cards[1].getSuit() or self.cards[0].getSuit() == self.cards[2].getSuit() or self.cards[1].getSuit() == self.cards[2].getSuit()
+        return self.hand[0].getSuit() == self.hand[1].getSuit() or self.hand[0].getSuit() == self.hand[2].getSuit() or self.hand[2].getSuit() == self.hand[1].getSuit()
 
+    # Encontra par nas cartas
     def getPair(self):
-        if self.cards[0].getSuit() == self.cards[1].getSuit():
-            return [self.cards[0], self.cards[1]] 
-        elif self.cards[0].getSuit() == self.cards[2].getSuit():
-            return [self.cards[0], self.cards[2]] 
+        if self.hand[0].getSuit() == self.hand[1].getSuit():
+            return [self.hand[0], self.hand[1]] 
+        elif self.hand[0].getSuit() == self.hand[2].getSuit():
+            return [self.hand[0], self.hand[2]] 
         else:   
-            return [self.cards[1], self.cards[2]] 
+            return [self.hand[1], self.hand[2]] 
 
+    # Getters pra Invido e Flor
     def hasInvido(self):
         return self.invido
 
     def getInvidoValue(self):
         return self.invidoValue
-
-    def defineInvido(self):
-        if not self.flor:
-            if self.hasPair():
-                pair = self.getPair()
-                self.invido = True
-                self.invidoValue = 20 + sum([pair[i].getValue() if not pair[i].isFag() else 0 for i in range(len(pair))])
-            else:
-                self.invido = False
-                self.invidoValue = 0   
 
     def hasFlor(self):
         return self.flor
@@ -50,13 +65,29 @@ class Player:
     def getFlorValue(self):
         return self.florValue
 
-    def defineFlor(self):
-        if self.cards[0].getSuit() == self.cards[1].getSuit() and self.cards[0].getSuit() == self.cards[2].getSuit():
-            self.flor = True
-            self.florValue = 20 + sum([self.cards[i].getValue() if not self.cards[i].isFag() else 0 for i in range(len(self.cards))])
-        else:
-            self.flor = False
-            self.florValue = 0
+    # Printa acoes possives na tela
+    def printActions(self):
+        print "1) Jogar carta"
 
-    def isThisMe(self, IP):
-        return self.IP == IP
+        if self.hasFlor:
+            print "2) Chamar Flor"
+        else:
+            print "2) Chamar Invido"
+
+    # Printa as cartas na tela
+    def printCards(self):
+        i = 0
+        print "Sua mao tem:"
+        for card in self.hand:
+            print str(i) + ") " + str(card)
+            i = i + 1
+
+    # Joga carta : remove carta da mao e envia mensagem ao servidor
+    def play(self, index, socket):
+        message = str(self.hand[index])
+        del self.hand[index]
+        socket.send(message)
+
+    # Retorna o numero de cartas na mao
+    def numCards(self):
+        return len(self.hand)

@@ -25,33 +25,31 @@ if __name__ == "__main__":
 
         CONNECTION_LIST.append(sockfd)
         print "Jogador (%s, %s) conectado" % addr	   
-        sockfd.send('allowed')
+        sockfd.send('accepted')
 
     print "Dois jogadores conectados, inicializando o jogo e enviando mensagem de inicializacao para ambos"
 
-    centralGame = game.serverGame()
-    centralGame.startGame(CONNECTION_LIST[1:3])
+    centralGame = game.serverGame('connected')
 
     print "Game Loop"
 
     while centralGame.getState() != 'terminate':
-        if centralGame.getState() == 'gameSetup':
-            centralGame.round()
-            centralGame.sendMessages(CONNECTION_LIST[1:3])
+        centralGame.evaluateGameState(CONNECTION_LIST[1:3])
 
-        read_sockets, write_sockets, error_sockets = select.select(CONNECTION_LIST,[],[])
+        read_sockets, write_sockets, error_sockets = select.select(CONNECTION_LIST,[],[], 0.5)
 
-        for sock in read_sockets:
-            # Tentativa de conexao com servidor lotado, negar
-            if sock == server_socket:
-                sockfd, addr = server_socket.accept()
-            	sockfd.send('denied')
-                sockfd.close()
+        if read_sockets:
+            for sock in read_sockets:
+                # Tentativa de conexao com servidor lotado, negar
+                if sock == server_socket:
+                    sockfd, addr = server_socket.accept()
+                    sockfd.send('denied')
+                    sockfd.close()
 
-			# Mensagem chegou de algum jogador, atualizar jogo
-            else:
-                centralGame.evaluateMessage(sock.recv(4096))
-                centralGame.sendMessages(CONNECTION_LIST[1:3])
+                # Mensagem chegou de algum jogador, atualizar jogo
+                else:
+                    centralGame.evaluateMessage(sock.recv(4096))
+                    centralGame.sendMessages(CONNECTION_LIST[1:3])
 
     # Fechando sockets e terminando conexao
     print "Jogo encerrado e conexoes desfeitas"
